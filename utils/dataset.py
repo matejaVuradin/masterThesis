@@ -86,7 +86,7 @@ def get_transforms(config: CycleGANConfig, use_padding=True):
     if use_padding:
         return transforms.Compose([
             PadToSize(config.img_size),
-            transforms.ToTensor(),
+            transforms.ToTensor(), #normalizacija na [0, 1]
             transforms.Normalize([0.5], [0.5])  # Normalizacija na [-1, 1]
         ])
     else:

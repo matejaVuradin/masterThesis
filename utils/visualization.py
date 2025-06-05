@@ -1,5 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
+import numpy as np
+from torch.utils.data import Subset, DataLoader
 
 # Vizualizacija
 def plot_training_curves(history, title):
@@ -27,8 +29,23 @@ def plot_training_curves(history, title):
     plt.tight_layout()
     plt.show()
 
-def visualize_results(G_AB, G_BA, dataloader, num_samples=4, config=None):
-    """Vizualiziraj rezultate na nekoliko uzoraka"""
+def visualize_results(G_AB, G_BA, dataloader, num_samples=4, config=None, crop_height=218, crop_width=182):
+    """
+    Vizualiziraj rezultate na prvih num_samples uzoraka iz dataseta
+    s croppanjem slika na specificiranu veličinu
+    
+    Args:
+        G_AB: Generator za T1->T2 translaciju
+        G_BA: Generator za T2->T1 translaciju
+        dataloader: DataLoader s podacima
+        num_samples: Broj uzoraka za vizualizaciju
+        config: Konfiguracija (opcionalno)
+        crop_height: Visina croppane slike
+        crop_width: Širina croppane slike
+        
+    Returns:
+        Matplotlib figura s rezultatima (ne prikazuje ju)
+    """
     if config is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -37,10 +54,36 @@ def visualize_results(G_AB, G_BA, dataloader, num_samples=4, config=None):
     G_AB.eval()
     G_BA.eval()
     
+    # Stvaramo novi dataloader koji uzima prvih num_samples uzoraka
+    dataset = dataloader.dataset
+    
+    # Stvaramo novi dataloader s batch_size=num_samples i bez miješanja podataka
+    sample_loader = DataLoader(
+        dataset, 
+        batch_size=num_samples, 
+        shuffle=False,
+        num_workers=1
+    )
+    
+    # Funkcija za croppanje slika na sredini
+    def center_crop(img, crop_h, crop_w):
+        # img je numpy array [H, W]
+        if len(img.shape) == 3:  # ako ima kanal dimenziju [C, H, W]
+            _, h, w = img.shape
+            start_h = (h - crop_h) // 2
+            start_w = (w - crop_w) // 2
+            return img[:, start_h:start_h+crop_h, start_w:start_w+crop_w]
+        else:  # [H, W]
+            h, w = img.shape
+            start_h = (h - crop_h) // 2
+            start_w = (w - crop_w) // 2
+            return img[start_h:start_h+crop_h, start_w:start_w+crop_w]
+    
+    # Uzimamo prvi batch koji će sadržavati prvih num_samples uzoraka
     with torch.no_grad():
-        batch = next(iter(dataloader))
-        real_A = batch["A"].to(device)[:num_samples]
-        real_B = batch["B"].to(device)[:num_samples]
+        batch = next(iter(sample_loader))
+        real_A = batch["A"].to(device)
+        real_B = batch["B"].to(device)
         
         # Generiraj lažne slike
         fake_B = G_AB(real_A)
@@ -79,78 +122,35 @@ def visualize_results(G_AB, G_BA, dataloader, num_samples=4, config=None):
         
         # Prikaži slike
         for i in range(num_samples):
-            images = [
-                real_A[i].squeeze().cpu(),
-                fake_B[i].squeeze().cpu(),
-                rec_A[i].squeeze().cpu(),
-                real_B[i].squeeze().cpu(),
-                fake_A[i].squeeze().cpu(),
-                rec_B[i].squeeze().cpu()
+            # Pripremi slike i cropaj ih
+            images_raw = [
+                real_A[i].squeeze().cpu().numpy(),
+                fake_B[i].squeeze().cpu().numpy(),
+                rec_A[i].squeeze().cpu().numpy(),
+                real_B[i].squeeze().cpu().numpy(),
+                fake_A[i].squeeze().cpu().numpy(),
+                rec_B[i].squeeze().cpu().numpy()
             ]
+            
+            # Cropaj slike
+            images = [center_crop(img, crop_height, crop_width) for img in images_raw]
             
             for j, img in enumerate(images):
                 if num_samples > 1:
                     ax = axes[i, j]
                 else:
                     ax = axes[j]
-                ax.imshow(img.numpy(), cmap='gray')
+                ax.imshow(img, cmap='gray', vmin=0, vmax=1)
                 ax.axis('off')
+                
+                # Dodajemo informaciju o pacijentu ako imamo putanje
+                if j == 0 and "A_path" in batch:  # Samo za prvi stupac
+                    import os
+                    filename = os.path.basename(batch["A_path"][i])
+                    # Pretpostavljam format "IXI123_T1_slice.png"
+                    if filename.startswith("IXI"):
+                        patient_id = filename.split("_")[0]
+                        ax.set_ylabel(f"Pacijent {patient_id}", fontsize=12, rotation=90, labelpad=10)
         
         plt.tight_layout()
-        plt.show()
 
-def compare_experiments(original_t1, original_t2, models_dict, config):
-    """
-    Uspoređuje rezultate različitih eksperimenata vizualno
-    
-    Args:
-        original_t1: Originalna T1 slika
-        original_t2: Originalna T2 slika
-        models_dict: Rječnik s modelima u formatu {'ime_eksperimenta': (G_AB, G_BA)}
-        config: Konfiguracija (za device)
-    """
-    num_experiments = len(models_dict)
-    
-    plt.figure(figsize=(12, 4 * (num_experiments + 1)))
-    
-    # Prikaži originalne slike
-    plt.subplot(num_experiments + 1, 2, 1)
-    plt.title("Original T1")
-    plt.imshow(original_t1.squeeze().cpu().numpy(), cmap='gray')
-    plt.axis('off')
-    
-    plt.subplot(num_experiments + 1, 2, 2)
-    plt.title("Original T2")
-    plt.imshow(original_t2.squeeze().cpu().numpy(), cmap='gray')
-    plt.axis('off')
-    
-    # Pripremi ulaz za modele
-    t1_input = original_t1.unsqueeze(0).to(config.device)  # [1, 1, H, W]
-    t2_input = original_t2.unsqueeze(0).to(config.device)  # [1, 1, H, W]
-    
-    # Generiraj i prikaži rezultate za svaki eksperiment
-    for i, (exp_name, (G_AB, G_BA)) in enumerate(models_dict.items(), 1):
-        G_AB.eval()
-        G_BA.eval()
-        
-        with torch.no_grad():
-            fake_t2 = G_AB(t1_input)
-            fake_t1 = G_BA(t2_input)
-            
-            # Normaliziraj za prikaz
-            fake_t2 = (fake_t2.squeeze().cpu() * 0.5 + 0.5).numpy()
-            fake_t1 = (fake_t1.squeeze().cpu() * 0.5 + 0.5).numpy()
-        
-        # Prikaži generirane slike
-        plt.subplot(num_experiments + 1, 2, 2*i + 1)
-        plt.title(f"{exp_name}: T1→T2")
-        plt.imshow(fake_t2, cmap='gray')
-        plt.axis('off')
-        
-        plt.subplot(num_experiments + 1, 2, 2*i + 2)
-        plt.title(f"{exp_name}: T2→T1")
-        plt.imshow(fake_t1, cmap='gray')
-        plt.axis('off')
-    
-    plt.tight_layout()
-    plt.show()
