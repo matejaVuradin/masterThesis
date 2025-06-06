@@ -11,14 +11,6 @@ from .config import CycleGANConfig
 
 class MRIDataset(Dataset):
     def __init__(self, t1_dir, t2_dir, transform=None):
-        """
-        MRI dataset za parove T1 i T2 slika
-        
-        Args:
-            t1_dir: Direktorij s T1 slikama
-            t2_dir: Direktorij s T2 slikama
-            transform: Opcionalna transformacija koja će se primijeniti
-        """
         self.transform = transform
         self.t1_file_paths = sorted(glob.glob(os.path.join(t1_dir, "*.png"))) #nadi sve png slike
         self.t2_file_paths = sorted(glob.glob(os.path.join(t2_dir, "*.png")))
@@ -28,28 +20,27 @@ class MRIDataset(Dataset):
         self.t1_ids = [os.path.basename(f).split('_')[0].replace("IXI", "") for f in self.t1_file_paths]
         self.t2_ids = [os.path.basename(f).split('_')[0].replace("IXI", "") for f in self.t2_file_paths]
         
-        # Pronalaženje zajedničkih ID-ova
+        # pronalaženje zajedničkih ID-ova
         common_ids = list(set(self.t1_ids) & set(self.t2_ids))
         if not common_ids:
             raise ValueError("Nije pronađen nijedan par T1/T2 slika!")
             
         print(f"Pronađeno {len(common_ids)} sparenih T1/T2 slika")
         
-        # Kreiranje mapiranja između ID-ova i putanja
+        # mapiranje između ID-ova i putanja
         t1_id_to_path = {os.path.basename(f).split('_')[0].replace("IXI", ""): f for f in self.t1_file_paths}
         t2_id_to_path = {os.path.basename(f).split('_')[0].replace("IXI", ""): f for f in self.t2_file_paths}
         
-        # Zadržavanje samo sparenih slika
+        # zadrži samo sparenih slika
         self.t1_files = [t1_id_to_path[id] for id in common_ids]
         self.t2_files = [t2_id_to_path[id] for id in common_ids]
         
-        # Sortiranje po ID-u pacijenta
+        # sortiraj po ID-u pacijenta
         sorted_indices = sorted(range(len(common_ids)), key=lambda i: common_ids[i])
         self.t1_files = [self.t1_files[i] for i in sorted_indices]
         self.t2_files = [self.t2_files[i] for i in sorted_indices]
         
     def __getitem__(self, index):
-        # Učitavanje slika
         t1_img = Image.open(self.t1_files[index]).convert('L')  # Konvertiranje u greyscale- 8 bit
         t2_img = Image.open(self.t2_files[index]).convert('L')
         
@@ -74,6 +65,7 @@ def pad_to_size(img, target_size=256):
     padding = (padding_left, padding_top, padding_right, padding_bottom)
     return transforms.functional.pad(img, padding, fill=0)
 
+#opcionalno, koristili su drugim radovima (ima li smisla?)
 class PadToSize:
     def __init__(self, size=256):
         self.size = size
@@ -82,7 +74,6 @@ class PadToSize:
         return pad_to_size(img, self.size)
 
 def get_transforms(config: CycleGANConfig, use_padding=True):
-    """Vraća transformacije za slike"""
     if use_padding:
         return transforms.Compose([
             PadToSize(config.img_size),
@@ -97,21 +88,8 @@ def get_transforms(config: CycleGANConfig, use_padding=True):
         ])
     
 def get_data_loaders(config: CycleGANConfig, test_split=True):
-    """
-    Stvaranje data loadera za treniranje, validaciju i opcionalno testiranje
-    
-    Args:
-        config: Konfiguracija modela
-        test_split: Ako True, stvara train/val/test split (70%/15%/15%)
-                   Ako False, stvara samo train/val split (80%/20%)
-    
-    Returns:
-        Ako test_split=True: (train_dataloader, val_dataloader, test_dataloader)
-        Ako test_split=False: (train_dataloader, val_dataloader)
-    """
     # Transformacije
     transform = get_transforms(config, use_padding=True)
-    
     # Dataset
     dataset = MRIDataset(config.t1_dir, config.t2_dir, transform=transform)
     
@@ -121,12 +99,10 @@ def get_data_loaders(config: CycleGANConfig, test_split=True):
         val_size = int(0.15 * len(dataset))
         test_size = len(dataset) - train_size - val_size
         
-        # Koristi sklearn za stratificirani split ako je moguće (ovdje koristimo random split)
         indices = list(range(len(dataset)))
         train_indices, temp_indices = train_test_split(indices, test_size=val_size+test_size, random_state=42)
         val_indices, test_indices = train_test_split(temp_indices, test_size=test_size, random_state=42)
-        
-        # Stvaranje podskupova podataka
+
         train_subset = torch.utils.data.Subset(dataset, train_indices)
         val_subset = torch.utils.data.Subset(dataset, val_indices)
         test_subset = torch.utils.data.Subset(dataset, test_indices)
@@ -136,12 +112,10 @@ def get_data_loaders(config: CycleGANConfig, test_split=True):
         # Izračunaj validation split (80% train, 20% validation)
         train_size = int(0.8 * len(dataset))
         val_size = len(dataset) - train_size
-        
-        # Koristi sklearn za split
+    
         indices = list(range(len(dataset)))
         train_indices, val_indices = train_test_split(indices, test_size=val_size, random_state=42)
         
-        # Stvaranje podskupova podataka
         train_subset = torch.utils.data.Subset(dataset, train_indices)
         val_subset = torch.utils.data.Subset(dataset, val_indices)
         
@@ -177,40 +151,19 @@ def get_data_loaders(config: CycleGANConfig, test_split=True):
         return train_dataloader, val_dataloader
     
 
-def get_stratified_data_loaders(config: CycleGANConfig, special_ids, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
-    """
-    Stvara dataloadere s stratificiranom podjelom koja osigurava da posebne slike
-    budu ravnomjerno raspoređene među skupovima.
-    
-    Args:
-        config: Konfiguracija modela
-        special_ids: Lista IXI ID-ova koji predstavljaju "mutnije" slike
-        train_ratio: Udio podataka za trening (default: 0.7)
-        val_ratio: Udio podataka za validaciju (default: 0.15)
-        test_ratio: Udio podataka za testiranje (default: 0.15)
-    
-    Returns:
-        (train_dataloader, val_dataloader, test_dataloader)
-    """
-    # Provjera omjera
-    assert abs(train_ratio + val_ratio + test_ratio - 1.0) < 1e-10, "Omjeri moraju davati zbroj 1.0"
-    
-    # Transformacije
+def get_stratified_data_loaders(config: CycleGANConfig, special_ids, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15): #kada imamo posebne slike koje želimo zadržati u svim skupovima
     transform = get_transforms(config, use_padding=True)
-    
-    # Dataset
+
     dataset = MRIDataset(config.t1_dir, config.t2_dir, transform=transform)
     
-    # Izdvoji indekse posebnih slika i regularnih slika
     special_indices = []
     regular_indices = []
     
     for i, data in enumerate(dataset):
-        # Dobavi ID iz putanje datoteke
         file_path = data["A_path"]  # T1 putanja
         file_name = os.path.basename(file_path)
         
-        # Pretpostavljam da je format imena "IXI123_T1_slice.png"
+        # npr. "IXI123_T1_slice.png"
         ixi_id = file_name.split('_')[0].replace("IXI", "")
         
         if ixi_id in special_ids:
@@ -220,24 +173,20 @@ def get_stratified_data_loaders(config: CycleGANConfig, special_ids, train_ratio
     
     print(f"Pronađeno {len(special_indices)} posebnih slika i {len(regular_indices)} regularnih slika.")
     
-    # Podjela posebnih slika
     special_train_size = int(len(special_indices) * train_ratio)
     special_val_size = int(len(special_indices) * val_ratio)
     special_test_size = len(special_indices) - special_train_size - special_val_size
-    
-    # Nasumična podjela posebnih slika
+
     random.shuffle(special_indices)
     
     special_train = special_indices[:special_train_size]
     special_val = special_indices[special_train_size:special_train_size + special_val_size]
     special_test = special_indices[special_train_size + special_val_size:]
     
-    # Podjela regularnih slika
     regular_train_size = int(len(regular_indices) * train_ratio)
     regular_val_size = int(len(regular_indices) * val_ratio)
     regular_test_size = len(regular_indices) - regular_train_size - regular_val_size
     
-    # Nasumična podjela regularnih slika
     random.shuffle(regular_indices)
     
     regular_train = regular_indices[:regular_train_size]
@@ -248,8 +197,7 @@ def get_stratified_data_loaders(config: CycleGANConfig, special_ids, train_ratio
     train_indices = special_train + regular_train
     val_indices = special_val + regular_val
     test_indices = special_test + regular_test
-    
-    # Ponovno izmiješaj kombinirane indekse
+
     random.shuffle(train_indices)
     random.shuffle(val_indices)
     random.shuffle(test_indices)
@@ -258,7 +206,6 @@ def get_stratified_data_loaders(config: CycleGANConfig, special_ids, train_ratio
     print(f"Podjela regularnih slika: {len(regular_train)} trening, {len(regular_val)} validacija, {len(regular_test)} test")
     print(f"Ukupna podjela: {len(train_indices)} trening, {len(val_indices)} validacija, {len(test_indices)} test")
     
-    # Stvaranje podskupova podataka
     train_subset = torch.utils.data.Subset(dataset, train_indices)
     val_subset = torch.utils.data.Subset(dataset, val_indices)
     test_subset = torch.utils.data.Subset(dataset, test_indices)

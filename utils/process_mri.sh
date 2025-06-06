@@ -46,7 +46,7 @@ cleanup() {
     exit 1
 }
 
-# Postavljanje trap-a za SIGINT (Ctrl+C)
+# Postavljanje za Ctrl+C
 trap cleanup SIGINT
 
 # Pronalaženje i obrada svih T1 slika

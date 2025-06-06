@@ -6,16 +6,6 @@ from .config import CycleGANConfig
 from .metrics import calculate_metrics, calculate_metrics_fixed_crop
 
 def test_model(G_AB, G_BA, test_dataloader, config: CycleGANConfig):
-    """
-    Testiranje istreniranog modela na test setu
-    
-    Args:
-        G_AB: Generator za T1->T2 translaciju
-        G_BA: Generator za T2->T1 translaciju
-        test_dataloader: DataLoader za test set
-        config: Konfiguracija modela
-    """
-    # Postavi modele u eval način rada
     G_AB.eval()
     G_BA.eval()
     
@@ -30,15 +20,15 @@ def test_model(G_AB, G_BA, test_dataloader, config: CycleGANConfig):
             real_A = batch["A"].to(config.device)  # T1
             real_B = batch["B"].to(config.device)  # T2
             
-            # Generiraj translacije
+            # translacije
             fake_B = G_AB(real_A)  # T1 -> T2
             fake_A = G_BA(real_B)  # T2 -> T1
             
-            # Generiraj rekonstrukcije
+            # rekonstrukcije
             rec_A = G_BA(fake_B)  # T1 -> T2 -> T1
             rec_B = G_AB(fake_A)  # T2 -> T1 -> T2
             
-            # Normaliziraj za izračun metrika
+            # normaliziraj
             real_A_norm = (real_A * 0.5 + 0.5)
             real_B_norm = (real_B * 0.5 + 0.5)
             fake_A_norm = (fake_A * 0.5 + 0.5)
@@ -93,7 +83,7 @@ def test_model(G_AB, G_BA, test_dataloader, config: CycleGANConfig):
                 metrics_cycle_t2["psnr_crop"].append(metrics_crop["psnr"])
 
     
-    # Izračunaj prosječne metrike
+    # prosječne metrike
     avg_metrics = {
         "T1->T2": {
             "ssim": np.mean(metrics_t1_to_t2["ssim"]),
@@ -139,8 +129,7 @@ def test_model(G_AB, G_BA, test_dataloader, config: CycleGANConfig):
             "psnr": np.mean(metrics_cycle_t2["psnr_crop"])
         }
     }
-    
-    # Ispiši rezultate
+
     print("\n=== Rezultati evaluacije ===")
     print("T1 -> T2 translacija:")
     print(f"  SSIM: {avg_metrics['T1->T2']['ssim']:.4f}")

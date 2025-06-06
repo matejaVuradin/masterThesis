@@ -53,7 +53,6 @@ class CycleGANConfig:
         self.lambda_B = lambda_B  #težina cycle gubitka za B->A->B
         self.lambda_identity = lambda_identity
         
-        # Hardware
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         else:

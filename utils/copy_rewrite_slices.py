@@ -42,8 +42,7 @@ subjects_to_remove = ["430", "433", "462", "463"]
 for t in ["t1", "t2"]:
     dir_path = os.path.join(destination_dir, t)
     for fname in os.listdir(dir_path):
-        # Ako naziv datoteke sadrži jednog od neželjenih ispitanika (npr. "IXI462"),
-        # izbriši datoteku.
+        # Ako naziv datoteke sadrži jednog od neželjenih ispitanika (npr. "IXI462"), izbriši datoteku
         if any(f"IXI{sub}" in fname for sub in subjects_to_remove):
             file_to_remove = os.path.join(dir_path, fname)
             os.remove(file_to_remove)

@@ -38,10 +38,8 @@ class LambdaLR: #linearno smanjivanje learning rate-a od neke epohe
     def step(self, epoch):
         return 1.0 - max(0, epoch - self.decay_start_epoch) / (self.n_epochs - self.decay_start_epoch)
 
-# Funkcije za inicijalizaciju i treniranje
-
+# Funkcije za inicijalizaciju 
 def init_weights(m):
-    """Inicijalizacija težina modela prema GAN praksi"""
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
         nn.init.normal_(m.weight.data, 0.0, 0.02)
@@ -59,7 +57,6 @@ def init_weights(m):
             nn.init.constant_(m.bias.data, 0.0)
 
 def create_model(config: CycleGANConfig):
-    """Stvara i inicijalizira modele prema zadanoj konfiguraciji"""
     # Odabir arhitekture za generatore
     if config.architecture == "standard":
         G_AB = UNetGenerator(config.input_channels, config.output_channels, config.ngf)
@@ -73,13 +70,8 @@ def create_model(config: CycleGANConfig):
     else:
         raise ValueError(f"Nepoznata arhitektura: {config.architecture}")
     
-    # Odabir arhitekture za diskriminatore
-    if "deep" in config.architecture:
-        D_A = DiscriminatorDeep(config.input_channels, config.ndf)
-        D_B = DiscriminatorDeep(config.input_channels, config.ndf)
-    else:
-        D_A = Discriminator(config.input_channels, config.ndf)
-        D_B = Discriminator(config.input_channels, config.ndf)
+    D_A = Discriminator(config.input_channels, config.ndf)
+    D_B = Discriminator(config.input_channels, config.ndf)
     
     # Inicijalizacija težina
     if "vgg19" in config.architecture:
@@ -112,7 +104,6 @@ def create_model(config: CycleGANConfig):
 
 
 def sample_images(epoch, G_AB, G_BA, val_dataloader, config):
-    """Generiranje uzorka slika i spremanje"""
     G_AB.eval()
     G_BA.eval()
     
@@ -123,11 +114,11 @@ def sample_images(epoch, G_AB, G_BA, val_dataloader, config):
         real_B = batch["B"].to(config.device)
         fake_A = G_BA(real_B)
         
-        # Također izračunaj rekonstrukcije ciklusa
+        # rekonstrukcije ciklusa
         rec_A = G_BA(fake_B)
         rec_B = G_AB(fake_A)
         
-        # Konvertiraj u slike u rasponu [0, 1]
+        # konvertiraj u slike u rasponu [0, 1]
         real_A = (real_A * 0.5 + 0.5).cpu()
         fake_B = (fake_B * 0.5 + 0.5).cpu()
         rec_A = (rec_A * 0.5 + 0.5).cpu()
@@ -135,13 +126,12 @@ def sample_images(epoch, G_AB, G_BA, val_dataloader, config):
         fake_A = (fake_A * 0.5 + 0.5).cpu()
         rec_B = (rec_B * 0.5 + 0.5).cpu()
         
-        # Stvori mrežu slika
         image_grid = make_grid([
             real_A[0], fake_B[0], rec_A[0],
             real_B[0], fake_A[0], rec_B[0]
         ], nrow=3, normalize=False)
         
-        # Spremi mrežu slika
+        # soremanje
         plt.figure(figsize=(15, 10))
         plt.imshow(image_grid.permute(1, 2, 0).numpy(), cmap='gray')
         plt.axis('off')
