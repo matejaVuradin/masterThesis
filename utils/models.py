@@ -168,22 +168,6 @@ class Discriminator(nn.Module):
 
     def forward(self, img):
         return self.model(img)
-
-# ResidualBlock za diskriminator koji koristimo gore
-class ResidualBlock(nn.Module):
-    def __init__(self, features):
-        super(ResidualBlock, self).__init__()
-        self.block = nn.Sequential(
-            nn.Conv2d(features, features, 3, padding=1, bias=False),
-            nn.InstanceNorm2d(features),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(features, features, 3, padding=1, bias=False),
-            nn.InstanceNorm2d(features)
-        )
-        self.leaky_relu = nn.LeakyReLU(0.2, inplace=True)
-        
-    def forward(self, x):
-        return self.leaky_relu(x + self.block(x))
     
 
 class VGG19FeatureExtractor(nn.Module):

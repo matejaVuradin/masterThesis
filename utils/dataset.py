@@ -65,7 +65,6 @@ def pad_to_size(img, target_size=256):
     padding = (padding_left, padding_top, padding_right, padding_bottom)
     return transforms.functional.pad(img, padding, fill=0)
 
-#opcionalno, koristili su drugim radovima (ima li smisla?)
 class PadToSize:
     def __init__(self, size=256):
         self.size = size
@@ -80,7 +79,7 @@ def get_transforms(config: CycleGANConfig, use_padding=True):
             transforms.ToTensor(), #normalizacija na [0, 1]
             transforms.Normalize([0.5], [0.5])  # Normalizacija na [-1, 1]
         ])
-    else:
+    else: #opcionalno, koristili su drugim radovima (ima li smisla?)
         return transforms.Compose([
             transforms.Resize((config.img_size, config.img_size)),
             transforms.ToTensor(),
