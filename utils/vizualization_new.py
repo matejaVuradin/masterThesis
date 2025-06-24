@@ -40,19 +40,20 @@ def generate_error_heatmap(real_img, fake_img, sigma=3):
     
     return error_map
 
-def analyze_worst_cases(G_AB, G_BA, dataloader, config, num_worst=5, direction="T1->T2"):
+def analyze_cases_by_quality(G_AB, G_BA, dataloader, config, num_cases=5, direction="T1->T2", best=False):
     """
-    Analizira najgore generirane slike na temelju SSIM metrike
+    Analizira najbolje ili najgore generirane slike na temelju SSIM metrike
     
     Args:
         G_AB, G_BA: Generirani modeli
         dataloader: DataLoader s test podacima
         config: Konfiguracija modela
-        num_worst: Broj najgorih slučajeva za analizu
+        num_cases: Broj slučajeva za analizu
         direction: Smjer translacije ("T1->T2" ili "T2->T1")
+        best: Ako je True, traži najbolje slučajeve, inače najgore
     
     Returns:
-        worst_cases: Lista tupleova (real_img, fake_img, ssim_score, batch_idx, sample_idx)
+        selected_cases: Lista tupleova (real_img, fake_img, ssim_score, batch_idx, sample_idx)
     """
     G_AB.eval()
     G_BA.eval()
@@ -88,21 +89,23 @@ def analyze_worst_cases(G_AB, G_BA, dataloader, config, num_worst=5, direction="
                     batch["A_path"][sample_idx], batch["B_path"][sample_idx]
                 ))
     
-    # Sortiraj po SSIM (najgori prvi)
-    all_cases.sort(key=lambda x: x[2])
+    # Sortiraj po SSIM (najbolji ili najgori prvi, ovisno o parametru best)
+    all_cases.sort(key=lambda x: x[2], reverse=best)
     
-    return all_cases[:num_worst]
+    return all_cases[:num_cases]
 
-def visualize_worst_cases_with_heatmaps(worst_cases, direction="T1->T2", crop_height=218, crop_width=182):
+def visualize_cases_with_heatmaps(cases, direction="T1->T2", crop_height=218, crop_width=182, best=False):
     """
-    Vizualizira najgore slučajeve s heatmapovima grešaka
+    Vizualizira odabrane slučajeve s heatmapovima grešaka
     
     Args:
-        worst_cases: Lista najgorih slučajeva iz analyze_worst_cases
+        cases: Lista slučajeva iz analyze_cases_by_quality
         direction: Smjer translacije
         crop_height, crop_width: Dimenzije za crop
+        best: Označava jesu li ovo najbolji slučajevi (za naslov)
     """
-    num_cases = len(worst_cases)
+    num_cases = len(cases)
+    case_type = "najboljih" if best else "najgorih"
     
     fig, axes = plt.subplots(num_cases, 4, figsize=(16, 4*num_cases))
     
@@ -115,7 +118,7 @@ def visualize_worst_cases_with_heatmaps(worst_cases, direction="T1->T2", crop_he
     axes[0, 2].set_title("Error Heatmap")
     axes[0, 3].set_title("Overlay")
     
-    for i, (real_img, fake_img, ssim_score, batch_idx, sample_idx, path_a, path_b) in enumerate(worst_cases):
+    for i, (real_img, fake_img, ssim_score, batch_idx, sample_idx, path_a, path_b) in enumerate(cases):
         # Crop slike
         real_cropped = center_crop(real_img, crop_height, crop_width)
         fake_cropped = center_crop(fake_img, crop_height, crop_width)
@@ -148,13 +151,25 @@ def visualize_worst_cases_with_heatmaps(worst_cases, direction="T1->T2", crop_he
                        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8),
                        fontsize=10, va='top')
     
-    plt.suptitle(f"Najgoriji rezultati za {direction} translaciju", fontsize=16)
+    plt.suptitle(f"{case_type.capitalize()} {num_cases} rezultata za {direction} translaciju", fontsize=16)
     plt.tight_layout()
     plt.show()
 
+def analyze_worst_cases(G_AB, G_BA, dataloader, config, num_worst=5, direction="T1->T2"):
+    """
+    Analizira najgore generirane slike na temelju SSIM metrike (legacy funkcija za kompatibilnost)
+    """
+    return analyze_cases_by_quality(G_AB, G_BA, dataloader, config, num_cases=num_worst, direction=direction, best=False)
+
+def visualize_worst_cases_with_heatmaps(worst_cases, direction="T1->T2", crop_height=218, crop_width=182):
+    """
+    Vizualizira najgore slučajeve s heatmapovima grešaka (legacy funkcija za kompatibilnost)
+    """
+    visualize_cases_with_heatmaps(worst_cases, direction, crop_height, crop_width, best=False)
+
 def visualize_results_enhanced(G_AB, G_BA, dataloader, num_samples=4, config=None, 
                               crop_height=218, crop_width=182, show_errors=True,
-                              analyze_worst=True, num_worst=3):
+                              analyze_worst=True, analyze_best=False, num_cases=3):
     """
     Proširena vizualizacija rezultata s analizom grešaka
     
@@ -166,7 +181,8 @@ def visualize_results_enhanced(G_AB, G_BA, dataloader, num_samples=4, config=Non
         crop_height, crop_width: Dimenzije za crop
         show_errors: Prikaži li error heatmapove
         analyze_worst: Analiziraj li najgore slučajeve
-        num_worst: Broj najgorih slučajeva za analizu
+        analyze_best: Analiziraj li najbolje slučajeve
+        num_cases: Broj najboljih/najgorih slučajeva za analizu
     """
     if config is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -274,16 +290,30 @@ def visualize_results_enhanced(G_AB, G_BA, dataloader, num_samples=4, config=Non
     # 2. Analiza najgorih slučajeva
     if analyze_worst:
         print("Analiziram najgore T1→T2 translacije...")
-        worst_t1_t2 = analyze_worst_cases(G_AB, G_BA, dataloader, config, 
-                                         num_worst=num_worst, direction="T1->T2")
-        visualize_worst_cases_with_heatmaps(worst_t1_t2, direction="T1->T2", 
-                                          crop_height=crop_height, crop_width=crop_width)
+        worst_t1_t2 = analyze_cases_by_quality(G_AB, G_BA, dataloader, config, 
+                                           num_cases=num_cases, direction="T1->T2", best=False)
+        visualize_cases_with_heatmaps(worst_t1_t2, direction="T1->T2", 
+                                     crop_height=crop_height, crop_width=crop_width, best=False)
         
         print("Analiziram najgore T2→T1 translacije...")
-        worst_t2_t1 = analyze_worst_cases(G_AB, G_BA, dataloader, config, 
-                                         num_worst=num_worst, direction="T2->T1")
-        visualize_worst_cases_with_heatmaps(worst_t2_t1, direction="T2->T1", 
-                                          crop_height=crop_height, crop_width=crop_width)
+        worst_t2_t1 = analyze_cases_by_quality(G_AB, G_BA, dataloader, config, 
+                                           num_cases=num_cases, direction="T2->T1", best=False)
+        visualize_cases_with_heatmaps(worst_t2_t1, direction="T2->T1", 
+                                     crop_height=crop_height, crop_width=crop_width, best=False)
+    
+    # 3. Analiza najboljih slučajeva
+    if analyze_best:
+        print("Analiziram najbolje T1→T2 translacije...")
+        best_t1_t2 = analyze_cases_by_quality(G_AB, G_BA, dataloader, config, 
+                                          num_cases=num_cases, direction="T1->T2", best=True)
+        visualize_cases_with_heatmaps(best_t1_t2, direction="T1->T2", 
+                                    crop_height=crop_height, crop_width=crop_width, best=True)
+        
+        print("Analiziram najbolje T2→T1 translacije...")
+        best_t2_t1 = analyze_cases_by_quality(G_AB, G_BA, dataloader, config, 
+                                          num_cases=num_cases, direction="T2->T1", best=True)
+        visualize_cases_with_heatmaps(best_t2_t1, direction="T2->T1", 
+                                    crop_height=crop_height, crop_width=crop_width, best=True)
 
 def plot_error_statistics(G_AB, G_BA, dataloader, config, crop_height=218, crop_width=182):
     """
