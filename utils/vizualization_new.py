@@ -2,7 +2,7 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 from torch.utils.data import DataLoader
-from metrics import calculate_metrics_fixed_crop
+from .metrics import calculate_metrics_fixed_crop
 import seaborn as sns
 from matplotlib.patches import Rectangle
 
