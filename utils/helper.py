@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from torchvision.utils import make_grid
 
 from .config import CycleGANConfig
-from .models import UNetGenerator, UNetGeneratorDeep, Discriminator, DiscriminatorDeep, VGG19Generator
+from .models import UNetGenerator, UNetGeneratorDeep, Discriminator, VGG19Generator
 
 # Pomoćne klase
 class ReplayBuffer:
@@ -61,9 +61,6 @@ def create_model(config: CycleGANConfig):
     if config.architecture == "standard":
         G_AB = UNetGenerator(config.input_channels, config.output_channels, config.ngf)
         G_BA = UNetGenerator(config.input_channels, config.output_channels, config.ngf)
-    elif config.architecture == "deep":
-        G_AB = UNetGeneratorDeep(config.input_channels, config.output_channels, config.ngf)
-        G_BA = UNetGeneratorDeep(config.input_channels, config.output_channels, config.ngf)
     elif config.architecture == "vgg19":
         G_AB = VGG19Generator(config.input_channels, config.output_channels)
         G_BA = VGG19Generator(config.input_channels, config.output_channels)
